@@ -170,8 +170,8 @@ const wayColor = (way) => {
     return [0,0,0,1];
   }
 
-  if(way.tags.highway === "footway") {
-    return [1,0,0,1];
+  if(["footway", "steps"].includes(way.tags.highway)) {
+    return [0.7,0.7,0.7,1];
   }
 
   if(way.tags.highway === "service") {
