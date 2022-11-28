@@ -31,7 +31,6 @@ const nodes = json.elements.filter(el => el.type === "node");
 const queryString = window.location.search;
 const urlParams = new URLSearchParams(queryString);
 
-const zoom = urlParams.get("zoom") ?? 17;
 const lat = urlParams.get("lat") ?? 50.7810827;
 const lon = urlParams.get("lon") ?? 6.0824173;
 
@@ -53,10 +52,8 @@ const rendered_highways = [
 
 const wayCoords = ways.filter(way => rendered_highways.includes(way.tags.highway)).map(way => ({
   ...way,
-  node_locations: way.nodes.map(node_id => nodes.find(node => node.id === node_id)).map(({lat, lon}) => formatToPoint({lat, lon}, zoom))
+  node_locations: way.nodes.map(node_id => nodes.find(node => node.id === node_id))
 }));
-
-const [centerX, centerY] = formatToPoint({lat, lon}, zoom);
 
 export function diagonalDemo(
   generateContext,
@@ -74,24 +71,35 @@ export function diagonalDemo(
     -1
   );
 
-  const view = mat4.lookAt(mat4.create(), [centerX-canvas.height/2, centerY-canvas.width/2, 1], [centerX-canvas.height/2, centerY-canvas.width/2, 0], [0,1,0]);
-
   const context = generateContext({
     regl,
     canvas
   });
 
-  // clear contents of the drawing buffer
-  regl.clear({
-    color: [0.94901961, 0.9372549, 0.91372549, 1],
-    depth: 1
-  })
+  const buffer = regl.buffer([]);
 
-  wayCoords.forEach(way => {
-      const buffer = regl.buffer(way.node_locations);
+  regl.frame(({time}) => {
+    const zoom = 17 + Math.cos(time);
+
+    // Clear Screen Color
+    regl.clear({
+      color: [0.94901961, 0.9372549, 0.91372549, 1],
+      depth: 1
+    })
+
+    // Construct View Matrix at view center, looking at view center
+    const [centerX, centerY] = formatToPoint({lat, lon}, zoom);
+    const view = mat4.lookAt(mat4.create(), [centerX-canvas.height/2, centerY-canvas.width/2, 1], [centerX-canvas.height/2, centerY-canvas.width/2, 0], [0,1,0]);
+
+    // Start building positions and indices arrays for single render-pass
+    const positions = [];
+    const indices = [];
+
+    wayCoords.forEach(way => {
+      const node_locations = way.node_locations.map(({lat, lon}) => formatToPoint({lat, lon}, zoom));
       buffer({
-          data: way.node_locations
-        });
+        data: node_locations
+      });
       renderFrame({
           regl,
           context,
@@ -100,14 +108,11 @@ export function diagonalDemo(
           projection,
           view,
           viewport: { x: 0, y: 0, width: canvas.width, height: canvas.height },
-          pointData: way.node_locations,
+          pointData: node_locations,
           way
       });
+    })
   })
-
-  // regl.frame(({time}) => {
-    
-  // })
 }
 
 export function initialize() {
