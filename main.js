@@ -1,28 +1,69 @@
 import { diagonalDemo } from "./demo"
 
-const segmentInstanceGeometry = [
-  [0, -0.5],
-  [1, -0.5],
-  [1, 0.5],
-  [0, -0.5],
-  [1, 0.5],
-  [0, 0.5]
-];
+function roundCapJoinGeometry(regl, resolution) {
+  const instanceRoundRound = [
+    [0, -0.5, 0],
+    [0, -0.5, 1],
+    [0, 0.5, 1],
+    [0, -0.5, 0],
+    [0, 0.5, 1],
+    [0, 0.5, 0]
+  ];
+  // Add the left cap.
+  for (let step = 0; step < resolution; step++) {
+    const theta0 = Math.PI / 2 + ((step + 0) * Math.PI) / resolution;
+    const theta1 = Math.PI / 2 + ((step + 1) * Math.PI) / resolution;
+    instanceRoundRound.push([0, 0, 0]);
+    instanceRoundRound.push([
+      0.5 * Math.cos(theta0),
+      0.5 * Math.sin(theta0),
+      0
+    ]);
+    instanceRoundRound.push([
+      0.5 * Math.cos(theta1),
+      0.5 * Math.sin(theta1),
+      0
+    ]);
+  }
+  // Add the right cap.
+  for (let step = 0; step < resolution; step++) {
+    const theta0 = (3 * Math.PI) / 2 + ((step + 0) * Math.PI) / resolution;
+    const theta1 = (3 * Math.PI) / 2 + ((step + 1) * Math.PI) / resolution;
+    instanceRoundRound.push([0, 0, 1]);
+    instanceRoundRound.push([
+      0.5 * Math.cos(theta0),
+      0.5 * Math.sin(theta0),
+      1
+    ]);
+    instanceRoundRound.push([
+      0.5 * Math.cos(theta1),
+      0.5 * Math.sin(theta1),
+      1
+    ]);
+  }
+  return {
+    buffer: regl.buffer(instanceRoundRound),
+    count: instanceRoundRound.length
+  };
+}
 
-function interleavedStrip(regl) {
+function interleavedStripRoundCapJoin(regl, resolution) {
+  let roundCapJoin = roundCapJoinGeometry(regl, resolution);
   return regl({
     vert: `
       precision highp float;
-      attribute vec2 position;
+      attribute vec3 position;
       attribute vec2 pointA, pointB;
       uniform float width;
       uniform mat4 projection;
       uniform mat4 view;
   
       void main() {
-        vec2 xBasis = pointB - pointA;
-        vec2 yBasis = normalize(vec2(-xBasis.y, xBasis.x));
-        vec2 point = pointA + xBasis * position.x + yBasis * width * position.y;
+        vec2 xBasis = normalize(pointB - pointA);
+        vec2 yBasis = vec2(-xBasis.y, xBasis.x);
+        vec2 offsetA = pointA + width * (position.x * xBasis + position.y * yBasis);
+        vec2 offsetB = pointB + width * (position.x * xBasis + position.y * yBasis);
+        vec2 point = mix(offsetA, offsetB, position.z);
         gl_Position = projection * view * vec4(point, 0, 1);
       }`,
 
@@ -35,7 +76,7 @@ function interleavedStrip(regl) {
 
     attributes: {
       position: {
-        buffer: regl.buffer(segmentInstanceGeometry),
+        buffer: roundCapJoin.buffer,
         divisor: 0
       },
       pointA: {
@@ -57,125 +98,56 @@ function interleavedStrip(regl) {
       view: regl.prop("view")
     },
 
+    depth: {
+      enable: false
+    },
+
     cull: {
       enable: true,
       face: "back"
     },
 
-    depth: {
-      enable: false
-    },
-
-    count: segmentInstanceGeometry.length,
+    count: roundCapJoin.count,
     instances: regl.prop("segments"),
     viewport: regl.prop("viewport")
   });
 }
 
-let instanceBevelJoin = [[0, 0], [1, 0], [0, 1]];
-
-function bevelJoin(regl) {
-  return regl({
-    vert: `
-    precision highp float;
-    attribute vec2 pointA, pointB, pointC;
-    attribute vec2 position;
-    uniform float width;
-    uniform mat4 projection;
-    uniform mat4 view;
-
-    void main() {
-      vec2 tangent = normalize(normalize(pointC - pointB) + normalize(pointB - pointA));
-      vec2 normal = vec2(-tangent.y, tangent.x);
-      vec2 ab = pointB - pointA;
-      vec2 cb = pointB - pointC;
-      float sigma = sign(dot(ab + cb, normal));
-      vec2 abn = normalize(vec2(-ab.y, ab.x));
-      vec2 cbn = -normalize(vec2(-cb.y, cb.x));
-      vec2 p0 = 0.5 * sigma * width * (sigma < 0.0 ? abn : cbn);
-      vec2 p1 = 0.5 * sigma * width * (sigma < 0.0 ? cbn : abn);
-      vec2 point = pointB + position.x * p0 + position.y * p1;
-      gl_Position = projection * view * vec4(point, 0, 1);
-    }`,
-
-    frag: `
-    precision highp float;
-    uniform vec4 color;
-    void main() {
-      gl_FragColor = color;
-    }`,
-
-    depth: {
-      enable: false
-    },
-
-    attributes: {
-      position: {
-        buffer: regl.buffer(instanceBevelJoin),
-        divisor: 0
-      },
-      pointA: {
-        buffer: regl.prop("points"),
-        divisor: 1,
-        offset: Float32Array.BYTES_PER_ELEMENT * 0
-      },
-      pointB: {
-        buffer: regl.prop("points"),
-        divisor: 1,
-        offset: Float32Array.BYTES_PER_ELEMENT * 2
-      },
-      pointC: {
-        buffer: regl.prop("points"),
-        divisor: 1,
-        offset: Float32Array.BYTES_PER_ELEMENT * 4
-      }
-    },
-
-    uniforms: {
-      width: regl.prop("width"),
-      color: regl.prop("color"),
-      projection: regl.prop("projection"),
-      view: regl.prop("view")
-    },
-
-    cull: {
-      enable: true,
-      face: "back"
-    },
-
-    count: instanceBevelJoin.length,
-    instances: regl.prop("instances"),
-    viewport: regl.prop("viewport")
-  });
-}
-
 const wayWidth = (way) => {
-  if(["residential", "primary"].includes(way.tags.highway)) {
-    return 15;
+  if(["primary"].includes(way.tags.highway)) {
+    return 18;
   }
 
-  if(way.tags.highway === "footway") {
-    return 2;
-  }
-
-  if(way.tags.highway === "service") {
-    return 5;
-  }
-
-  return 10;
-}
-
-const wayColor = (way) => {
-  if(["residential", "primary"].includes(way.tags.highway)) {
-    return [0,0,0,1];
+  if(["residential", "secondary", "tertiary", "living_street", "primary_link"].includes(way.tags.highway)) {
+    return 12;
   }
 
   if(["footway", "steps"].includes(way.tags.highway)) {
-    return [0.7,0.7,0.7,1];
+    return 2;
+  }
+
+  if(["service", "pedestrian"].includes(way.tags.highway)) {
+    return 7;
+  }
+
+  return 7;
+}
+
+const wayColor = (way) => {
+  if(["primary", "primary_link"].includes(way.tags.highway)) {
+    return [0.98823529, 0.83921569, 0.64313725, 1];
+  }
+
+  if(["residential", "secondary", "tertiary", "living_street", "unclassified", "pedestrian"].includes(way.tags.highway)) {
+    return [1, 1, 1, 1];
+  }
+
+  if(["footway", "steps", "cycleway"].includes(way.tags.highway)) {
+    return [0.95294118, 0.60392157, 0.54117647, 1];
   }
 
   if(way.tags.highway === "service") {
-    return [0.4,0.4,0.4,1];
+    return [0.85,0.85,0.85,1];
   }
 
   return [0,0,0,1];
@@ -184,12 +156,11 @@ const wayColor = (way) => {
 diagonalDemo(
   function(params) {
     return {
-      interleavedStrip: interleavedStrip(params.regl),
-      bevelJoin: bevelJoin(params.regl)
+      interleavedStripRoundCapJoin: interleavedStripRoundCapJoin(params.regl, 2)
     };
   },
   function(params) {
-    params.context.interleavedStrip({
+    params.context.interleavedStripRoundCapJoin({
       points: params.buffer,
       width: wayWidth(params.way),
       color: wayColor(params.way),
@@ -197,15 +168,6 @@ diagonalDemo(
       view: params.view,
       viewport: params.viewport,
       segments: params.pointData.length - 1
-    });
-    params.context.bevelJoin({
-      points: params.buffer,
-      width: wayWidth(params.way),
-      color: [1, 0, 0, 1],
-      projection: params.projection,
-      view: params.view,
-      viewport: params.viewport,
-      instances: params.pointData.length - 2
     });
   }
 );

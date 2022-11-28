@@ -31,11 +31,27 @@ const nodes = json.elements.filter(el => el.type === "node");
 const queryString = window.location.search;
 const urlParams = new URLSearchParams(queryString);
 
-const zoom = urlParams.get("zoom") ?? 16;
+const zoom = urlParams.get("zoom") ?? 17;
 const lat = urlParams.get("lat") ?? 50.7810827;
 const lon = urlParams.get("lon") ?? 6.0824173;
 
-const wayCoords = ways.filter(way => ["footway", "service", "steps"].includes(way.tags.highway) || ["Wittekindstraße", "Saarstraße", "Ludwigsallee", "Friesenstraße", "Malteserstraße", "Marienbongard", "Veltmanplatz", "Hermannstraße", "Pontstraße", "Kreuzherrenstraße", "Pontdriesch", "Bergdriesch", "Hirschgraben", "Bergstraße", "Achterstraße", "Kupferstraße", "Lousbergstraße", "Weyhestraße"].includes(way.tags.name)).map(way => ({
+const rendered_highways = [
+  "secondary",
+  "primary",
+  "tertiary",
+  "residential",
+  "pedestrian",
+  "primary_link",
+  "service",
+  "living_street",
+  "unclassified",
+  "cycleway",
+  "tertiary_link",
+]
+
+// "footway", "steps", "track",
+
+const wayCoords = ways.filter(way => rendered_highways.includes(way.tags.highway)).map(way => ({
   ...way,
   node_locations: way.nodes.map(node_id => nodes.find(node => node.id === node_id)).map(({lat, lon}) => formatToPoint({lat, lon}, zoom))
 }));
@@ -67,12 +83,11 @@ export function diagonalDemo(
 
   // clear contents of the drawing buffer
   regl.clear({
-    color: [0, 0, 0, 0],
+    color: [0.94901961, 0.9372549, 0.91372549, 1],
     depth: 1
   })
 
   wayCoords.forEach(way => {
-      console.log(way.node_locations);
       const buffer = regl.buffer(way.node_locations);
       buffer({
           data: way.node_locations
@@ -105,8 +120,9 @@ export function initialize() {
   canvas.style.width = canvas.style.height = "100%";
   document.body.appendChild(canvas);
 
-  canvas.width = canvas.clientWidth;
-  canvas.height = canvas.clientHeight;
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  canvas.width = Math.round(canvas.clientWidth * devicePixelRatio);
+  canvas.height = Math.round(canvas.clientHeight * devicePixelRatio);
 
   const regl = REGL({
     canvas,
