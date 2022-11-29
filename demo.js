@@ -25,14 +25,54 @@ function formatToPoint(latLng, zoom) {
   return [y, x];
 }
 
+const wayColor = (way) => {
+  if(["primary", "primary_link"].includes(way.tags.highway)) {
+    return [0.98823529, 0.83921569, 0.64313725];
+  }
+
+  if(["residential", "secondary", "tertiary", "living_street", "unclassified", "pedestrian"].includes(way.tags.highway)) {
+    return [1, 1, 1];
+  }
+
+  if(["footway", "steps", "cycleway"].includes(way.tags.highway)) {
+    return [0.95294118, 0.60392157, 0.54117647];
+  }
+
+  if(way.tags.highway === "service") {
+    return [0.85,0.85,0.85];
+  }
+
+  return [0,0,0];
+}
+
+const wayWidth = (way) => {
+  if(["primary"].includes(way.tags.highway)) {
+    return 18;
+  }
+
+  if(["residential", "secondary", "tertiary", "living_street", "primary_link"].includes(way.tags.highway)) {
+    return 12;
+  }
+
+  if(["footway", "steps"].includes(way.tags.highway)) {
+    return 2;
+  }
+
+  if(["service", "pedestrian"].includes(way.tags.highway)) {
+    return 7;
+  }
+
+  return 7;
+}
+
 const ways = json.elements.filter(el => el.type === "way");
 const nodes = json.elements.filter(el => el.type === "node");
 
 const queryString = window.location.search;
 const urlParams = new URLSearchParams(queryString);
 
-const lat = urlParams.get("lat") ?? 50.7810827;
-const lon = urlParams.get("lon") ?? 6.0824173;
+const lat = urlParams.get("lat") ?? 50.782366;
+const lon = urlParams.get("lon") ?? 6.083527;
 
 const rendered_highways = [
   "secondary",
@@ -76,10 +116,26 @@ export function diagonalDemo(
     canvas
   });
 
-  const buffer = regl.buffer([]);
+  const positionsBuffer = regl.buffer([]);
+  const colorBuffer = regl.buffer([]);
+  const widthsBuffer = regl.buffer([]);
+
+  let zoom = 17;
+  let scrollY = 0;
+
+  document.addEventListener("wheel", (e) => {
+    scrollY = e.deltaY;
+  })
 
   regl.frame(({time}) => {
-    const zoom = 17 + Math.cos(time);
+
+    zoom += scrollY * -0.001;
+    zoom = Math.max(zoom, 16);
+    zoom = Math.min(zoom, 20);
+    scrollY *= 0.01;
+    if(scrollY < 0.1) {
+      scrollY = 0;
+    }
 
     // Clear Screen Color
     regl.clear({
@@ -91,27 +147,37 @@ export function diagonalDemo(
     const [centerX, centerY] = formatToPoint({lat, lon}, zoom);
     const view = mat4.lookAt(mat4.create(), [centerX-canvas.height/2, centerY-canvas.width/2, 1], [centerX-canvas.height/2, centerY-canvas.width/2, 0], [0,1,0]);
 
-    // Start building positions and indices arrays for single render-pass
     const positions = [];
-    const indices = [];
+    const colors = [];
+    const widths = [];
 
     wayCoords.forEach(way => {
-      const node_locations = way.node_locations.map(({lat, lon}) => formatToPoint({lat, lon}, zoom));
-      buffer({
-        data: node_locations
-      });
-      renderFrame({
-          regl,
-          context,
-          buffer,
-          canvas,
-          projection,
-          view,
-          viewport: { x: 0, y: 0, width: canvas.width, height: canvas.height },
-          pointData: node_locations,
-          way
-      });
+      positions.push(...way.node_locations.map(({lat, lon}) => formatToPoint({lat, lon}, zoom)), 0)
+      colors.push(...way.node_locations.map(_ => wayColor(way)), 0);
+      widths.push(...way.node_locations.map(_ => wayWidth(way)), 0);
     })
+
+    positionsBuffer({
+      data: positions
+    });
+    colorBuffer({
+      data: colors
+    });
+    widthsBuffer({
+      data: widths
+    })
+    renderFrame({
+        regl,
+        context,
+        positionsBuffer,
+        colorBuffer,
+        widthsBuffer,
+        canvas,
+        projection,
+        view,
+        viewport: { x: 0, y: 0, width: canvas.width, height: canvas.height },
+        pointData: positions
+    });
   })
 }
 
