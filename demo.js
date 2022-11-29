@@ -1,5 +1,6 @@
 import REGL from "regl";
 import { mat4 } from "gl-matrix";
+import Stats from "stats.js";
 
 import json from "./aachen.json";
 
@@ -101,6 +102,10 @@ export function diagonalDemo(
 ) {
   const { canvas, regl } = initialize();
 
+  var stats = new Stats();
+  stats.showPanel(0);
+  document.body.appendChild(stats.dom);
+
   const projection = mat4.ortho(
     mat4.create(),
     0,
@@ -128,7 +133,7 @@ export function diagonalDemo(
   })
 
   regl.frame(({time}) => {
-
+    stats.begin();
     zoom += scrollY * -0.001;
     zoom = Math.max(zoom, 16);
     zoom = Math.min(zoom, 20);
@@ -178,6 +183,7 @@ export function diagonalDemo(
         viewport: { x: 0, y: 0, width: canvas.width, height: canvas.height },
         pointData: positions
     });
+	  stats.end();
   })
 }
 
