@@ -23,7 +23,7 @@ function formatToPoint(latLng, zoom) {
   let x = Math.floor(worldCoordinate.x * scale);
   let y = Math.floor(worldCoordinate.y * scale);
 
-  return [y, x];
+  return [x, -y];
 }
 
 const wayColor = (way) => {
@@ -134,7 +134,7 @@ export function diagonalDemo(
 
   regl.frame(({time}) => {
     stats.begin();
-    zoom += scrollY * -0.001;
+    zoom += scrollY * -0.005;
     zoom = Math.max(zoom, 16);
     zoom = Math.min(zoom, 20);
     scrollY *= 0.01;
