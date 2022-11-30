@@ -12,6 +12,7 @@
     "vite": "^3.2.3"
   },
   "dependencies": {
+    "delaunator": "^5.0.0",
     "gl-matrix": "^3.4.3",
     "regl": "^2.1.0",
     "stats.js": "^0.17.0"

@@ -5,9 +5,26 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vite App</title>
+    <style>
+      p {
+        padding: 0;
+        margin: 2px 0 0 0;
+      }
+      #overlay {
+        position: absolute;
+        top: 0;
+        right: 0;
+        opacity: 0.5;
+        margin-right: 2px;
+        z-index: 10;
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="overlay">
+      <p id="coords"></p>
+      <p id="zoom"></p>
+    </div>
     <script type="module" src="/main.js"></script>
   </body>
 </html>

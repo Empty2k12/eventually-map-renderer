@@ -1,37 +1,31 @@
 import REGL from "regl";
 import { mat4 } from "gl-matrix";
 import Stats from "stats.js";
+import Delaunator from 'delaunator';
 
 import json from "./aachen.json";
+import { formatToPoint, groundResolution, unproject } from "./mercator";
 
-const project = (latLng) => {
-  const TILE_SIZE = 256;
-  let siny = Math.sin((latLng.lat * Math.PI) / 180);
+// https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-maps/zoom-levels-and-tile-grid.md
 
-  siny = Math.min(Math.max(siny, -0.9999), 0.9999);
+const devicePixelRatio = window.devicePixelRatio || 1;
 
-  return {
-      x: TILE_SIZE * (0.5 + latLng.lon / 360),
-      y: TILE_SIZE * (0.5 - Math.log((1 + siny) / (1 - siny)) / (4 * Math.PI))
-  };
-};
+let isDragging = false;
+let lastX = 0;
+let lastY = 0;
+let currentX = 0;
+let currentY = 0;
+let cameraX = 0;
+let cameraY = 0;
 
-function formatToPoint(latLng, zoom) {
-  const worldCoordinate = project(latLng);
-  const scale = Math.pow(2, zoom);
-
-  let x = Math.floor(worldCoordinate.x * scale);
-  let y = Math.floor(worldCoordinate.y * scale);
-
-  return [x, -y];
-}
+let zoom = 17;
 
 const wayColor = (way) => {
   if(["primary", "primary_link"].includes(way.tags.highway)) {
     return [0.98823529, 0.83921569, 0.64313725];
   }
 
-  if(["residential", "secondary", "tertiary", "living_street", "unclassified", "pedestrian"].includes(way.tags.highway)) {
+  if(["residential", "secondary", "tertiary", "tertiary_link", "living_street", "unclassified", "pedestrian"].includes(way.tags.highway)) {
     return [1, 1, 1];
   }
 
@@ -51,7 +45,7 @@ const wayWidth = (way) => {
     return 18;
   }
 
-  if(["residential", "secondary", "tertiary", "living_street", "primary_link"].includes(way.tags.highway)) {
+  if(["residential", "secondary", "tertiary", "tertiary_link", "living_street", "primary_link"].includes(way.tags.highway)) {
     return 12;
   }
 
@@ -72,8 +66,8 @@ const nodes = json.elements.filter(el => el.type === "node");
 const queryString = window.location.search;
 const urlParams = new URLSearchParams(queryString);
 
-const lat = urlParams.get("lat") ?? 50.782366;
-const lon = urlParams.get("lon") ?? 6.083527;
+let lat = urlParams.get("lat") ?? 50.782366;
+let lon = urlParams.get("lon") ?? 6.083527;
 
 const rendered_highways = [
   "secondary",
@@ -125,18 +119,51 @@ export function diagonalDemo(
   const colorBuffer = regl.buffer([]);
   const widthsBuffer = regl.buffer([]);
 
-  let zoom = 17;
-  let scrollY = 0;
-
   document.addEventListener("wheel", (e) => {
-    scrollY = e.deltaY;
+    zoom += e.deltaY * -0.005;
+    zoom = Math.max(zoom, 15);
+    zoom = Math.min(zoom, 21);
+    document.getElementById("zoom").innerHTML = `Zoom ${zoom.toFixed(4)}`;
+  })
+
+  document.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    currentX = e.clientX * devicePixelRatio;
+    currentY = e.clientY * devicePixelRatio;
+  });
+
+  document.addEventListener("mouseup", (e) => {
+    isDragging = false;
+  })
+
+  document.addEventListener("mouseout", (e) => {
+    isDragging = false;
+  })
+
+  document.addEventListener("mousemove", (e) => {
+    if(isDragging) {
+      lastX = currentX;
+      lastY = currentY;
+
+      currentX = e.clientX * devicePixelRatio;
+      currentY = e.clientY * devicePixelRatio;
+
+      const dx = currentX - lastX;
+      const dy = currentY - lastY;
+
+      cameraX += dx;
+      cameraY += dy;
+
+      lat += dy * groundResolution(lat, zoom) / 111111;
+      lon -= dx / Math.pow(2, zoom);
+
+      e.preventDefault();
+    }
   })
 
   regl.frame(({time}) => {
     stats.begin();
-    zoom += scrollY * -0.005;
-    zoom = Math.max(zoom, 16);
-    zoom = Math.min(zoom, 20);
+
     scrollY *= 0.01;
     if(scrollY < 0.1) {
       scrollY = 0;
@@ -149,8 +176,12 @@ export function diagonalDemo(
     })
 
     // Construct View Matrix at view center, looking at view center
+    // const [centerX, centerY] = formatToPoint({lat: lat + (cameraY * groundResolution(lat, zoom) / 111111), lon: lon - cameraX / Math.pow(2, zoom)}, zoom);
     const [centerX, centerY] = formatToPoint({lat, lon}, zoom);
-    const view = mat4.lookAt(mat4.create(), [centerX-canvas.height/2, centerY-canvas.width/2, 1], [centerX-canvas.height/2, centerY-canvas.width/2, 0], [0,1,0]);
+    const view = mat4.lookAt(mat4.create(), [centerX + canvas.width/2, centerY + canvas.height/2, 1], [centerX + canvas.width/2, centerY + canvas.height/2, 0], [0,-1,0]);
+
+    const {x, y} = unproject({x: -centerX, y: centerY}, zoom);
+    document.getElementById("coords").innerHTML = `Center ${y.toFixed(6)}/${x.toFixed(6)}`;
 
     const positions = [];
     const colors = [];
@@ -197,7 +228,6 @@ export function initialize() {
   canvas.style.width = canvas.style.height = "100%";
   document.body.appendChild(canvas);
 
-  const devicePixelRatio = window.devicePixelRatio || 1;
   canvas.width = Math.round(canvas.clientWidth * devicePixelRatio);
   canvas.height = Math.round(canvas.clientHeight * devicePixelRatio);
 
