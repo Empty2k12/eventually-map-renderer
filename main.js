@@ -1,6 +1,7 @@
 import { diagonalDemo } from "./demo"
 
 function roundCapJoinGeometry(regl, resolution) {
+  console.count("roundCapJoinGeometry");
   const instanceRoundRound = [
     [0, -0.5, 0],
     [0, -0.5, 1],

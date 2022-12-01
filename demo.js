@@ -4,9 +4,12 @@ import Stats from "stats.js";
 import Delaunator from 'delaunator';
 
 import json from "./aachen.json";
-import { formatToPoint, groundResolution, unproject } from "./mercator";
+import { formatToPoint, groundResolution } from "./mercator";
 
 // https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-maps/zoom-levels-and-tile-grid.md
+
+const updateLatLonDisplay = () => document.getElementById("coords").innerHTML = `Center ${lat.toFixed(6)}/${lon.toFixed(6)}`;
+const updateZoomDisplay = () => document.getElementById("zoom").innerHTML = `Zoom ${zoom.toFixed(4)}`;
 
 const devicePixelRatio = window.devicePixelRatio || 1;
 
@@ -15,10 +18,9 @@ let lastX = 0;
 let lastY = 0;
 let currentX = 0;
 let currentY = 0;
-let cameraX = 0;
-let cameraY = 0;
 
 let zoom = 17;
+updateZoomDisplay();
 
 const wayColor = (way) => {
   if(["primary", "primary_link"].includes(way.tags.highway)) {
@@ -57,6 +59,10 @@ const wayWidth = (way) => {
     return 7;
   }
 
+  if(["rail"].includes(way.tags.railway)) {
+    return 3;
+  }
+
   return 7;
 }
 
@@ -68,6 +74,7 @@ const urlParams = new URLSearchParams(queryString);
 
 let lat = urlParams.get("lat") ?? 50.782366;
 let lon = urlParams.get("lon") ?? 6.083527;
+updateLatLonDisplay();
 
 const rendered_highways = [
   "secondary",
@@ -85,7 +92,7 @@ const rendered_highways = [
 
 // "footway", "steps", "track",
 
-const wayCoords = ways.filter(way => rendered_highways.includes(way.tags.highway)).map(way => ({
+const wayCoords = ways.filter(way => rendered_highways.includes(way.tags.highway) || way.tags.railway === "rail").map(way => ({
   ...way,
   node_locations: way.nodes.map(node_id => nodes.find(node => node.id === node_id))
 }));
@@ -123,7 +130,7 @@ export function diagonalDemo(
     zoom += e.deltaY * -0.005;
     zoom = Math.max(zoom, 15);
     zoom = Math.min(zoom, 21);
-    document.getElementById("zoom").innerHTML = `Zoom ${zoom.toFixed(4)}`;
+    updateZoomDisplay();
   })
 
   document.addEventListener("mousedown", (e) => {
@@ -151,11 +158,9 @@ export function diagonalDemo(
       const dx = currentX - lastX;
       const dy = currentY - lastY;
 
-      cameraX += dx;
-      cameraY += dy;
-
       lat += dy * groundResolution(lat, zoom) / 111111;
       lon -= dx / Math.pow(2, zoom);
+      updateLatLonDisplay();
 
       e.preventDefault();
     }
@@ -176,12 +181,8 @@ export function diagonalDemo(
     })
 
     // Construct View Matrix at view center, looking at view center
-    // const [centerX, centerY] = formatToPoint({lat: lat + (cameraY * groundResolution(lat, zoom) / 111111), lon: lon - cameraX / Math.pow(2, zoom)}, zoom);
     const [centerX, centerY] = formatToPoint({lat, lon}, zoom);
     const view = mat4.lookAt(mat4.create(), [centerX + canvas.width/2, centerY + canvas.height/2, 1], [centerX + canvas.width/2, centerY + canvas.height/2, 0], [0,-1,0]);
-
-    const {x, y} = unproject({x: -centerX, y: centerY}, zoom);
-    document.getElementById("coords").innerHTML = `Center ${y.toFixed(6)}/${x.toFixed(6)}`;
 
     const positions = [];
     const colors = [];
