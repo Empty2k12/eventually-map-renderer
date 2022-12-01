@@ -1,3 +1,16 @@
+export const areaColor = (way) => {
+    if(way.tags.building) {
+        return 0.5;
+    }
+
+    if(way.tags.leisure === "park" || way.tags.natural === "scrub" || ["grass", "forest"].includes(way.tags.landuse)) {
+        return 0.8;
+    }
+
+    return 1;
+}
+
+
 export const wayColor = (way) => {
     if(["primary", "primary_link"].includes(way.tags.highway)) {
         return [0.98823529, 0.83921569, 0.64313725];

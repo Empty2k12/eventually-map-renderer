@@ -50,10 +50,12 @@ export function WayRenderer(regl, resolution) {
     return regl({
         vert: `
             precision highp float;
+
             attribute vec3 position;
             attribute vec2 pointA, pointB;
             attribute vec3 color;
             attribute float width;
+
             uniform mat4 projection;
             uniform mat4 view;
 
@@ -112,12 +114,12 @@ export function WayRenderer(regl, resolution) {
         },
 
         depth: {
-        enable: false
+            enable: false
         },
 
         cull: {
-        enable: true,
-        face: "back"
+            enable: true,
+            face: "back"
         },
 
         count: wayGeom.count,
