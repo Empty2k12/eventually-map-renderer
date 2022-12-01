@@ -1,149 +1,186 @@
-import { diagonalDemo } from "./demo"
+import REGL from "regl";
+import { mat4 } from "gl-matrix";
+import Stats from "stats.js";
+import Delaunator from 'delaunator';
 
-function roundCapJoinGeometry(regl, resolution) {
-  console.count("roundCapJoinGeometry");
-  const instanceRoundRound = [
-    [0, -0.5, 0],
-    [0, -0.5, 1],
-    [0, 0.5, 1],
-    [0, -0.5, 0],
-    [0, 0.5, 1],
-    [0, 0.5, 0]
-  ];
-  // Add the left cap.
-  for (let step = 0; step < resolution; step++) {
-    const theta0 = Math.PI / 2 + ((step + 0) * Math.PI) / resolution;
-    const theta1 = Math.PI / 2 + ((step + 1) * Math.PI) / resolution;
-    instanceRoundRound.push([0, 0, 0]);
-    instanceRoundRound.push([
-      0.5 * Math.cos(theta0),
-      0.5 * Math.sin(theta0),
-      0
-    ]);
-    instanceRoundRound.push([
-      0.5 * Math.cos(theta1),
-      0.5 * Math.sin(theta1),
-      0
-    ]);
+import json from "./aachen.json";
+import { formatToPoint, groundResolution } from "./src/projection/mercator";
+import { wayColor, wayWidth } from "./src/style/mapStyle";
+import { shouldRenderFeature } from "./src/style/featureSelector";
+import { WayRenderer } from "./src/renderer/renderWays";
+
+// https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-maps/zoom-levels-and-tile-grid.md
+
+const updateLatLonDisplay = () => document.getElementById("coords").innerHTML = `Center ${lat.toFixed(6)}/${lon.toFixed(6)}`;
+const updateZoomDisplay = () => document.getElementById("zoom").innerHTML = `Zoom ${zoom.toFixed(4)}`;
+
+const devicePixelRatio = window.devicePixelRatio || 1;
+
+let isDragging = false;
+let lastX = 0;
+let lastY = 0;
+let currentX = 0;
+let currentY = 0;
+
+let zoom = 17;
+updateZoomDisplay();
+
+const ways = json.elements.filter(el => el.type === "way" && el.tags !== undefined);
+const nodes = json.elements.filter(el => el.type === "node");
+
+const enhanceLocations = (way) => ({
+  ...way,
+  node_locations: way.nodes.map(node_id => nodes.find(node => node.id === node_id))
+})
+
+const veltmannplatz = enhanceLocations(ways.find(way => way.id === 4444703)).node_locations.map(({lat, lon}) => formatToPoint({lat, lon}, zoom));
+
+const delaunay = new Delaunator([...veltmannplatz, veltmannplatz[0][0]].flat());
+console.log(delaunay.triangles);
+
+const queryString = window.location.search;
+const urlParams = new URLSearchParams(queryString);
+
+let lat = urlParams.get("lat") ?? 50.782366;
+let lon = urlParams.get("lon") ?? 6.083527;
+updateLatLonDisplay();
+
+const wayCoords = ways.filter(shouldRenderFeature).map(enhanceLocations);
+
+const { canvas, regl } = initialize();
+
+var stats = new Stats();
+stats.showPanel(0);
+document.body.appendChild(stats.dom);
+
+const projection = mat4.ortho(
+  mat4.create(),
+  0,
+  canvas.width,
+  0,
+  canvas.height,
+  1,
+  -1
+);
+
+const renderWays = WayRenderer(regl, 3);
+
+const positionsBuffer = regl.buffer([]);
+const colorBuffer = regl.buffer([]);
+const widthsBuffer = regl.buffer([]);
+
+document.addEventListener("wheel", (e) => {
+  zoom += e.deltaY * -0.005;
+  zoom = Math.max(zoom, 15);
+  zoom = Math.min(zoom, 21);
+  updateZoomDisplay();
+})
+
+document.addEventListener("mousedown", (e) => {
+  isDragging = true;
+  currentX = e.clientX * devicePixelRatio;
+  currentY = e.clientY * devicePixelRatio;
+});
+
+document.addEventListener("mouseup", (e) => {
+  isDragging = false;
+})
+
+document.addEventListener("mouseout", (e) => {
+  isDragging = false;
+})
+
+document.addEventListener("mousemove", (e) => {
+  if(isDragging) {
+    lastX = currentX;
+    lastY = currentY;
+
+    currentX = e.clientX * devicePixelRatio;
+    currentY = e.clientY * devicePixelRatio;
+
+    const dx = currentX - lastX;
+    const dy = currentY - lastY;
+
+    lat += dy * groundResolution(lat, zoom) / 111111;
+    lon -= dx / Math.pow(2, zoom);
+    updateLatLonDisplay();
+
+    e.preventDefault();
   }
-  // Add the right cap.
-  for (let step = 0; step < resolution; step++) {
-    const theta0 = (3 * Math.PI) / 2 + ((step + 0) * Math.PI) / resolution;
-    const theta1 = (3 * Math.PI) / 2 + ((step + 1) * Math.PI) / resolution;
-    instanceRoundRound.push([0, 0, 1]);
-    instanceRoundRound.push([
-      0.5 * Math.cos(theta0),
-      0.5 * Math.sin(theta0),
-      1
-    ]);
-    instanceRoundRound.push([
-      0.5 * Math.cos(theta1),
-      0.5 * Math.sin(theta1),
-      1
-    ]);
+})
+
+regl.frame(({time}) => {
+  stats.begin();
+
+  scrollY *= 0.01;
+  if(scrollY < 0.1) {
+    scrollY = 0;
   }
+
+  // Clear Screen Color
+  regl.clear({
+    color: [0.94901961, 0.9372549, 0.91372549, 1],
+    depth: 1
+  })
+
+  // Construct View Matrix at view center, looking at view center
+  const [centerX, centerY] = formatToPoint({lat, lon}, zoom);
+  const view = mat4.lookAt(mat4.create(), [centerX + canvas.width/2, centerY + canvas.height/2, 1], [centerX + canvas.width/2, centerY + canvas.height/2, 0], [0,-1,0]);
+
+  const positions = [];
+  const colors = [];
+  const widths = [];
+
+  wayCoords.forEach(way => {
+    positions.push(...way.node_locations.map(({lat, lon}) => formatToPoint({lat, lon}, zoom)), 0)
+    colors.push(...way.node_locations.map(_ => wayColor(way)), 0);
+    widths.push(...way.node_locations.map(_ => wayWidth(way)), 0);
+  })
+
+  positionsBuffer({
+    data: positions
+  });
+  colorBuffer({
+    data: colors
+  });
+  widthsBuffer({
+    data: widths
+  })
+  renderWays({
+      points: positionsBuffer,
+      color: colorBuffer,
+      widths: widthsBuffer,
+      projection,
+      view,
+      viewport: { x: 0, y: 0, width: canvas.width, height: canvas.height },
+      segments: positions.length - 1
+  });
+  stats.end();
+})
+
+export function initialize() {
+  document.body.style.margin = "0px";
+  document.body.parentElement.style.height = "100%";
+  document.body.style.width = document.body.style.height = "100%";
+  document.body.style.overflow = "hidden";
+
+  const canvas = document.createElement("canvas");
+  canvas.style.width = canvas.style.height = "100%";
+  document.body.appendChild(canvas);
+
+  canvas.width = Math.round(canvas.clientWidth * devicePixelRatio);
+  canvas.height = Math.round(canvas.clientHeight * devicePixelRatio);
+
+  const regl = REGL({
+    canvas,
+    attributes: {
+      antialias: true
+    },
+    extensions: ["ANGLE_instanced_arrays"]
+  });
+
   return {
-    positionsBuffer: regl.buffer(instanceRoundRound),
-    count: instanceRoundRound.length
+    canvas,
+    regl
   };
 }
-
-function interleavedStripRoundCapJoin(regl, resolution) {
-  let roundCapJoin = roundCapJoinGeometry(regl, resolution);
-  return regl({
-    vert: `
-      precision highp float;
-      attribute vec3 position;
-      attribute vec2 pointA, pointB;
-      attribute vec3 color;
-      attribute float width;
-      uniform mat4 projection;
-      uniform mat4 view;
-
-      varying vec3 vColor;
-  
-      void main() {
-        vec2 xBasis = normalize(pointB - pointA);
-        vec2 yBasis = vec2(-xBasis.y, xBasis.x);
-        vec2 offsetA = pointA + width * (position.x * xBasis + position.y * yBasis);
-        vec2 offsetB = pointB + width * (position.x * xBasis + position.y * yBasis);
-        vec2 point = mix(offsetA, offsetB, position.z);
-
-        vColor = color;
-
-        gl_Position = projection * view * vec4(point, 0, 1);
-      }`,
-
-    frag: `
-      precision highp float;
-
-      varying vec3 vColor;
-
-      void main() {
-        gl_FragColor = vec4(vColor.xyz,1);
-      }`,
-
-    attributes: {
-      position: {
-        buffer: roundCapJoin.positionsBuffer
-      },
-      color: {
-        buffer: regl.prop("color"),
-        divisor: 1,
-        offset: Float32Array.BYTES_PER_ELEMENT * 0
-      },
-      width: {
-        buffer: regl.prop("widths"),
-        divisor: 1,
-        offset: Float32Array.BYTES_PER_ELEMENT * 0
-      },
-      pointA: {
-        buffer: regl.prop("points"),
-        divisor: 1,
-        offset: Float32Array.BYTES_PER_ELEMENT * 0
-      },
-      pointB: {
-        buffer: regl.prop("points"),
-        divisor: 1,
-        offset: Float32Array.BYTES_PER_ELEMENT * 2
-      }
-    },
-
-    uniforms: {
-      projection: regl.prop("projection"),
-      view: regl.prop("view")
-    },
-
-    depth: {
-      enable: false
-    },
-
-    cull: {
-      enable: true,
-      face: "back"
-    },
-
-    count: roundCapJoin.count,
-    instances: regl.prop("segments"),
-    viewport: regl.prop("viewport")
-  });
-}
-
-diagonalDemo(
-  function(params) {
-    return {
-      interleavedStripRoundCapJoin: interleavedStripRoundCapJoin(params.regl, 3)
-    };
-  },
-  function(params) {
-    params.context.interleavedStripRoundCapJoin({
-      points: params.positionsBuffer,
-      color: params.colorBuffer,
-      widths: params.widthsBuffer,
-      projection: params.projection,
-      view: params.view,
-      viewport: params.viewport,
-      segments: params.pointData.length - 1
-    });
-  }
-);

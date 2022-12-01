@@ -8,6 +8,7 @@ const MAX_LATITUDE = 85.05112878;
 export const project = (latLng) => {
   let siny = Math.sin((latLng.lat * Math.PI) / 180);
 
+  // todo use MIN_LATITUDE and MAX_LATITUDE
   siny = Math.min(Math.max(siny, -0.9999), 0.9999);
 
   return {
