@@ -83,14 +83,64 @@ const colorBuffer = regl.buffer([]);
 const widthsBuffer = regl.buffer([]);
 const indicesBuffer = regl.elements([]);
 
+let wayPositionsCount = 0;
+const wayPositionsBuffer = regl.buffer([]);
+const wayColorBuffer = regl.buffer([]);
+
 const renderWays = WayRenderer(regl, 3);
 const renderPolygons = PolygonRenderer(regl);
+
+const reprojectGeometries = () => {
+  let positions = [];
+  let colors = [];
+  let indices = new Uint32Array();
+ 
+  areaCoords.forEach(area => {
+    const offset = positions.length;
+    positions.push(...area.positions.map(([lat, lon]) => formatToPoint({lat, lon}, zoom)));
+    let closedIndices2 = new Uint32Array(indices.length + area.indices.length);
+    closedIndices2.set(indices, 0);
+    closedIndices2.set(area.indices.map(index => index + offset), indices.length);
+    indices = closedIndices2;
+
+    colors.push(...area.positions.map(_ => areaColor(area)));
+  })
+  positionsBuffer({
+    data: positions
+  })
+  indicesBuffer({
+    data: indices
+  })
+  colorBuffer({
+    data: colors
+  })
+
+  const widths = [];
+  positions = [];
+  colors = [];
+  wayCoords.forEach(way => {
+    positions.push(...way.node_locations.map(({lat, lon}) => formatToPoint({lat, lon}, zoom)), 0)
+    colors.push(...way.node_locations.map(_ => wayColor(way)), 0);
+    widths.push(...way.node_locations.map(_ => wayWidth(way)), 0);
+  })
+  wayPositionsBuffer({
+    data: positions
+  });
+  wayColorBuffer({
+    data: colors
+  });
+  widthsBuffer({
+    data: widths
+  })
+  wayPositionsCount = positions.length - 1;
+}
 
 document.addEventListener("wheel", (e) => {
   zoom += e.deltaY * -0.005;
   zoom = Math.max(zoom, 15);
   zoom = Math.min(zoom, 21);
   updateZoomDisplay();
+  reprojectGeometries();
 })
 
 document.addEventListener("mousedown", (e) => {
@@ -145,34 +195,6 @@ regl.frame(({time}) => {
   const [centerX, centerY] = formatToPoint({lat, lon}, zoom);
   const view = mat4.lookAt(mat4.create(), [centerX + canvas.width/2, centerY + canvas.height/2, 1], [centerX + canvas.width/2, centerY + canvas.height/2, 0], [0,-1,0]);
 
-  /**
-   * 
-   * Draw Rectangles
-   * 
-   */
-  let positions = [];
-  let colors = [];
-  let indices = new Uint32Array();
-
-  areaCoords.forEach(area => {
-    const offset = positions.length;
-    positions.push(...area.positions.map(([lat, lon]) => formatToPoint({lat, lon}, zoom)));
-    let closedIndices2 = new Uint32Array(indices.length + area.indices.length);
-    closedIndices2.set(indices, 0);
-    closedIndices2.set(area.indices.map(index => index + offset), indices.length);
-    indices = closedIndices2;
-
-    colors.push(...area.positions.map(_ => areaColor(area)));
-  })
-  positionsBuffer({
-    data: positions
-  })
-  indicesBuffer({
-    data: indices
-  })
-  colorBuffer({
-    data: colors
-  })
   renderPolygons({
     positions: positionsBuffer,
     indices: indicesBuffer,
@@ -181,37 +203,14 @@ regl.frame(({time}) => {
     view,
     viewport: { x: 0, y: 0, width: canvas.width, height: canvas.height }
   })
-
-  /**
-   * 
-   * Draw Ways
-   * 
-   */
-  const widths = [];
-  positions = [];
-  colors = [];
-  wayCoords.forEach(way => {
-    positions.push(...way.node_locations.map(({lat, lon}) => formatToPoint({lat, lon}, zoom)), 0)
-    colors.push(...way.node_locations.map(_ => wayColor(way)), 0);
-    widths.push(...way.node_locations.map(_ => wayWidth(way)), 0);
-  })
-  positionsBuffer({
-    data: positions
-  });
-  colorBuffer({
-    data: colors
-  });
-  widthsBuffer({
-    data: widths
-  })
   renderWays({
-      points: positionsBuffer,
-      color: colorBuffer,
+      points: wayPositionsBuffer,
+      color: wayColorBuffer,
       widths: widthsBuffer,
       projection,
       view,
       viewport: { x: 0, y: 0, width: canvas.width, height: canvas.height },
-      segments: positions.length - 1
+      segments: wayPositionsCount
   });
   stats.end();
 })
