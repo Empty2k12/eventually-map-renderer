@@ -1,7 +1,7 @@
 import REGL from "regl";
 import { mat4 } from "gl-matrix";
 import Stats from "stats.js";
-import Delaunator from 'delaunator';
+import earcut from "earcut";
 
 import json from "./aachen2.json";
 import { formatToPoint, groundResolution } from "./src/projection/mercator";
@@ -26,7 +26,7 @@ let currentY = 0;
 let zoom = 17;
 updateZoomDisplay();
 
-const ways = json.elements.filter(el => el.type === "way" && el.tags !== undefined && !el.tags.landuse);
+const ways = json.elements.filter(el => el.type === "way" && el.tags !== undefined && !el.tags.landuse && !el.tags.boundary && el.tags.university !== "campus" && el.tags.highway !== "pedestrian" && el.tags.railway !== "razed");
 const nodes = json.elements.filter(el => el.type === "node");
 
 const enhanceLocations = (way) => ({
@@ -45,7 +45,7 @@ const isClosedWay = (way) => way.nodes[0] === way.nodes[way.nodes.length - 1];
 const isOpenWay = (way) => way.nodes[0] !== way.nodes[way.nodes.length - 1];
 
 const wayCoords = ways
-  .filter(isOpenWay)
+  .filter(shouldRenderFeature)
   .map(enhanceLocations);
 
 // Process Closed Ways
@@ -53,12 +53,12 @@ const areaCoords = ways
   .filter(isClosedWay)
   .map(enhanceLocations)
   .map(way => {
-    const node_locations = way.node_locations.map(({lat, lon}) => [lat, lon])
-    const delaunay = new Delaunator(node_locations.flat());
+    const node_locations = way.node_locations.slice(0, -1).map(({lat, lon}) => [lat, lon])
+    // const delaunay = new Delaunator(node_locations.flat());
     return {
       ...way,
       positions: node_locations,
-      indices: delaunay.triangles
+      indices: earcut(node_locations.flat())
     }
   });
 

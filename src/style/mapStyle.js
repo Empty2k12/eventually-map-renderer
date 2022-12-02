@@ -3,7 +3,7 @@ export const areaColor = (way) => {
         return 0.5;
     }
 
-    if(way.tags.leisure === "park" || way.tags.natural === "scrub" || ["grass", "forest"].includes(way.tags.landuse)) {
+    if(way.tags.leisure === "park" || way.tags.natural === "scrub" || ["grass", "forest"].includes(way.tags.landuse) || ["garden", "pitch"].includes(way.tags.leisure) || way.tags.scrub === "grass") {
         return 0.8;
     }
 
