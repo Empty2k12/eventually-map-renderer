@@ -93,23 +93,19 @@ const renderPolygons = PolygonRenderer(regl);
 const reprojectGeometries = () => {
   let positions = [];
   let colors = [];
-  let indices = new Uint32Array();
+  let indices = [];
  
   areaCoords.forEach(area => {
     const offset = positions.length;
     positions.push(...area.positions.map(([lat, lon]) => formatToPoint({lat, lon}, zoom)));
-    let closedIndices2 = new Uint32Array(indices.length + area.indices.length);
-    closedIndices2.set(indices, 0);
-    closedIndices2.set(area.indices.map(index => index + offset), indices.length);
-    indices = closedIndices2;
-
+    indices.push(...area.indices.map(index => index + offset));
     colors.push(...area.positions.map(_ => areaColor(area)));
   })
   positionsBuffer({
     data: positions
   })
   indicesBuffer({
-    data: indices
+    data: new Uint32Array(indices)
   })
   colorBuffer({
     data: colors
@@ -145,16 +141,19 @@ document.addEventListener("wheel", (e) => {
 
 document.addEventListener("mousedown", (e) => {
   isDragging = true;
+  document.body.style.cursor = "grabbing";
   currentX = e.clientX * devicePixelRatio;
   currentY = e.clientY * devicePixelRatio;
 });
 
 document.addEventListener("mouseup", (e) => {
   isDragging = false;
+  document.body.style.cursor = "grab";
 })
 
 document.addEventListener("mouseout", (e) => {
   isDragging = false;
+  document.body.style.cursor = "grab";
 })
 
 document.addEventListener("mousemove", (e) => {
@@ -176,6 +175,7 @@ document.addEventListener("mousemove", (e) => {
   }
 })
 
+reprojectGeometries();
 regl.frame(({time}) => {
   stats.begin();
 
