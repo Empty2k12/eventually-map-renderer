@@ -1,21 +1,29 @@
 const TILE_SIZE = 256;
 
+// https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-maps/zoom-levels-and-tile-grid.md
+
 const EARTH_RADIUS = 6378137;
 
 const MIN_LATITUDE = -85.05112878;
 const MAX_LATITUDE = 85.05112878;
+const MIN_LONGITUDE = -180;
+const MAX_LONGITUDE = 180;
 
-export const project = (latLng) => {
-  let siny = Math.sin((latLng.lat * Math.PI) / 180);
+export const project = (position, zoom) => {
+  var latitude = clip(position.lat, MIN_LATITUDE, MAX_LATITUDE);
+  var longitude = clip(position.lon, MIN_LONGITUDE, MAX_LONGITUDE);
 
-  // todo use MIN_LATITUDE and MAX_LATITUDE
-  siny = Math.min(Math.max(siny, -0.9999), 0.9999);
+  var x = (longitude + 180) / 360;
+  var sinLatitude = Math.sin(latitude * Math.PI / 180);
+  var y = 0.5 - Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI);
 
-  return {
-      x: TILE_SIZE * (0.5 + latLng.lon / 360),
-      y: TILE_SIZE * (0.5 - Math.log((1 + siny) / (1 - siny)) / (4 * Math.PI))
-  };
-};
+  var mapSize = calculateMapSize(zoom, TILE_SIZE);
+
+  return [
+      -clip(x * mapSize + 0.5, 0, mapSize - 1),
+      clip(y * mapSize + 0.5, 0, mapSize - 1)
+  ];
+}
 
 export const unproject = (xy, zoom) => {
     let mapSize = calculateMapSize(zoom, TILE_SIZE);
@@ -27,16 +35,6 @@ export const unproject = (xy, zoom) => {
         x: 360 * x,
         y: 90 - 360 * Math.atan(Math.exp(-y * 2 * Math.PI)) / Math.PI
     }
-}
-
-export function formatToPoint(latLng, zoom) {
-  const worldCoordinate = project(latLng);
-  const scale = Math.pow(2, zoom);
-
-  let x = Math.floor(worldCoordinate.x * scale);
-  let y = Math.floor(worldCoordinate.y * scale);
-
-  return [-x, y];
 }
 
 /**

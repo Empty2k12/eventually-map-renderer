@@ -4,13 +4,13 @@ import Stats from "stats.js";
 import earcut from "earcut";
 
 import json from "./aachen2.json";
-import { formatToPoint, groundResolution } from "./src/projection/mercator";
+import { groundResolution, project } from "./src/projection/mercator";
 import { areaColor, wayColor, wayWidth } from "./src/style/mapStyle";
 import { shouldRenderFeature } from "./src/style/featureSelector";
 import { WayRenderer } from "./src/renderer/WayRenderer";
 import { PolygonRenderer } from "./src/renderer/PolygonRenderer";
-
-// https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/azure-maps/zoom-levels-and-tile-grid.md
+import Pbf from "pbf";
+import { Tile } from "./src/proto/vector_tile_proto";
 
 const updateLatLonDisplay = () => document.getElementById("coords").innerHTML = `Center ${lat.toFixed(6)}/${lon.toFixed(6)}`;
 const updateZoomDisplay = () => document.getElementById("zoom").innerHTML = `Zoom ${zoom.toFixed(4)}`;
@@ -26,7 +26,13 @@ let currentY = 0;
 let zoom = 17;
 updateZoomDisplay();
 
-const ways = json.elements.filter(el => el.type === "way" && el.tags !== undefined && !el.tags.landuse && !el.tags.boundary && el.tags.university !== "campus" && el.tags.highway !== "pedestrian" && el.tags.railway !== "razed");
+fetch("./5502.pbf").then(file => file.arrayBuffer()).then(buf => {
+  var pbf = new Pbf(buf);
+  var obj = Tile.read(pbf);
+  console.log({obj});
+})
+
+const ways = json.elements.filter(el => el.type === "way" && el.tags !== undefined && !el.tags.landuse && !el.tags.boundary && el.tags.university !== "campus" && el.tags.amenity !== "school" && el.tags.highway !== "pedestrian" && el.tags.railway !== "razed");
 const nodes = json.elements.filter(el => el.type === "node");
 
 const enhanceLocations = (way) => ({
@@ -41,10 +47,11 @@ let lat = urlParams.get("lat") ?? 50.778845;
 let lon = urlParams.get("lon") ?? 6.078324;
 updateLatLonDisplay();
 
-const isClosedWay = (way) => way.nodes[0] === way.nodes[way.nodes.length - 1];
+const isClosedWay = (way) => way.nodes[0] === way.nodes[way.nodes.length - 1] || way.tags.area === "yes";
 const isOpenWay = (way) => way.nodes[0] !== way.nodes[way.nodes.length - 1];
 
 const wayCoords = ways
+  .filter(way => way.tags.area !== "yes")
   .filter(shouldRenderFeature)
   .map(enhanceLocations);
 
@@ -97,7 +104,7 @@ const reprojectGeometries = () => {
  
   areaCoords.forEach(area => {
     const offset = positions.length;
-    positions.push(...area.positions.map(([lat, lon]) => formatToPoint({lat, lon}, zoom)));
+    positions.push(...area.positions.map(([lat, lon]) => project({lat, lon}, zoom)));
     indices.push(...area.indices.map(index => index + offset));
     colors.push(...area.positions.map(_ => areaColor(area)));
   })
@@ -115,7 +122,7 @@ const reprojectGeometries = () => {
   positions = [];
   colors = [];
   wayCoords.forEach(way => {
-    positions.push(...way.node_locations.map(({lat, lon}) => formatToPoint({lat, lon}, zoom)), 0)
+    positions.push(...way.node_locations.map(({lat, lon}) => project({lat, lon}, zoom)), 0)
     colors.push(...way.node_locations.map(_ => wayColor(way)), 0);
     widths.push(...way.node_locations.map(_ => wayWidth(way)), 0);
   })
@@ -192,7 +199,7 @@ regl.frame(({time}) => {
   })
 
   // Construct View Matrix at view center, looking at view center
-  const [centerX, centerY] = formatToPoint({lat, lon}, zoom);
+  const [centerX, centerY] = project({lat, lon}, zoom);
   const view = mat4.lookAt(mat4.create(), [centerX + canvas.width/2, centerY + canvas.height/2, 1], [centerX + canvas.width/2, centerY + canvas.height/2, 0], [0,-1,0]);
 
   renderPolygons({

@@ -7,6 +7,10 @@ export const areaColor = (way) => {
         return 0.8;
     }
 
+    if(way.tags.amenity === "parking") {
+        return 0.3;
+    }
+
     return 1;
 }
 
