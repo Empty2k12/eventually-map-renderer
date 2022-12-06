@@ -6,7 +6,6 @@ import earcut from "earcut";
 import json from "./aachen2.json";
 import { groundResolution, project } from "./src/projection/mercator";
 import { areaColor, wayColor, wayWidth } from "./src/style/mapStyle";
-import { shouldRenderFeature } from "./src/style/featureSelector";
 import { WayRenderer } from "./src/renderer/WayRenderer";
 import { PolygonRenderer } from "./src/renderer/PolygonRenderer";
 import Pbf from "pbf";
@@ -32,7 +31,7 @@ fetch("./5502.pbf").then(file => file.arrayBuffer()).then(buf => {
   console.log({obj});
 })
 
-const ways = json.elements.filter(el => el.type === "way" && el.tags !== undefined && !el.tags.landuse && !el.tags.boundary && el.tags.university !== "campus" && el.tags.amenity !== "school" && el.tags.highway !== "pedestrian" && el.tags.railway !== "razed");
+const ways = json.elements.filter(el => el.type === "way" && el.tags !== undefined && !el.tags.landuse && !el.tags.boundary && el.tags.university !== "campus" && el.tags.highway !== "pedestrian" && el.tags.railway !== "razed");
 const nodes = json.elements.filter(el => el.type === "node");
 
 const enhanceLocations = (way) => ({
@@ -48,11 +47,11 @@ let lon = urlParams.get("lon") ?? 6.078324;
 updateLatLonDisplay();
 
 const isClosedWay = (way) => way.nodes[0] === way.nodes[way.nodes.length - 1] || way.tags.area === "yes";
-const isOpenWay = (way) => way.nodes[0] !== way.nodes[way.nodes.length - 1];
+const isOpenWay = (way) => way.nodes[0] !== way.nodes[way.nodes.length - 1] && !way.tags.barrier && !way.tags.indoor && !way.tags["roof:ridge"] && !way.tags["roof:edge"] && way.tags.amenity !== "bench" && !way.tags["removed:highway"] && way.tags.natural !== "tree_row";
 
 const wayCoords = ways
   .filter(way => way.tags.area !== "yes")
-  .filter(shouldRenderFeature)
+  .filter(isOpenWay)
   .map(enhanceLocations);
 
 // Process Closed Ways
@@ -61,7 +60,6 @@ const areaCoords = ways
   .map(enhanceLocations)
   .map(way => {
     const node_locations = way.node_locations.slice(0, -1).map(({lat, lon}) => [lat, lon])
-    // const delaunay = new Delaunator(node_locations.flat());
     return {
       ...way,
       positions: node_locations,
@@ -101,10 +99,18 @@ const reprojectGeometries = () => {
   let positions = [];
   let colors = [];
   let indices = [];
+
+  const [centerX, centerY] = project({lat, lon}, zoom);
  
   areaCoords.forEach(area => {
     const offset = positions.length;
-    positions.push(...area.positions.map(([lat, lon]) => project({lat, lon}, zoom)));
+    positions.push(...area.positions.map(([lat, lon]) => {
+      const [projectedX, projectedY] = project({lat, lon}, zoom)
+      return [
+        projectedX - centerX,
+        projectedY - centerY
+      ];
+    }));
     indices.push(...area.indices.map(index => index + offset));
     colors.push(...area.positions.map(_ => areaColor(area)));
   })
@@ -122,7 +128,13 @@ const reprojectGeometries = () => {
   positions = [];
   colors = [];
   wayCoords.forEach(way => {
-    positions.push(...way.node_locations.map(({lat, lon}) => project({lat, lon}, zoom)), 0)
+    positions.push(...way.node_locations.map(({lat, lon}) => {
+      const [projectedX, projectedY] = project({lat, lon}, zoom)
+      return [
+        projectedX - centerX,
+        projectedY - centerY
+      ];
+    }), 0)
     colors.push(...way.node_locations.map(_ => wayColor(way)), 0);
     widths.push(...way.node_locations.map(_ => wayWidth(way)), 0);
   })
@@ -177,6 +189,7 @@ document.addEventListener("mousemove", (e) => {
     lat += dy * groundResolution(lat, zoom) / 111111;
     lon -= dx / Math.pow(2, zoom);
     updateLatLonDisplay();
+    reprojectGeometries();
 
     e.preventDefault();
   }
@@ -198,9 +211,7 @@ regl.frame(({time}) => {
     depth: 1
   })
 
-  // Construct View Matrix at view center, looking at view center
-  const [centerX, centerY] = project({lat, lon}, zoom);
-  const view = mat4.lookAt(mat4.create(), [centerX + canvas.width/2, centerY + canvas.height/2, 1], [centerX + canvas.width/2, centerY + canvas.height/2, 0], [0,-1,0]);
+  const view = mat4.lookAt(mat4.create(), [canvas.width/2, canvas.height/2, 1], [canvas.width/2, canvas.height/2, 0], [0,-1,0]);
 
   renderPolygons({
     positions: positionsBuffer,

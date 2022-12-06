@@ -11,6 +11,10 @@ export const areaColor = (way) => {
         return 0.3;
     }
 
+    if(way.tags.amenity === "school" || way.tags.university === "campus") {
+        return 0.1;
+    }
+
     return 1;
 }
 
@@ -24,12 +28,16 @@ export const wayColor = (way) => {
         return [1, 1, 1];
     }
 
-    if(["footway", "steps", "cycleway"].includes(way.tags.highway)) {
+    if(["footway", "steps", "cycleway", "path", "track"].includes(way.tags.highway)) {
         return [0.95294118, 0.60392157, 0.54117647];
     }
 
     if(way.tags.highway === "service") {
         return [0.85,0.85,0.85];
+    }
+
+    if(way.tags.waterway === "stream") {
+        return [0.666, 0.82745098, 0.8745098];
     }
 
     return [0,0,0];
@@ -44,7 +52,7 @@ export const wayWidth = (way) => {
         return 12;
     }
 
-    if(["footway", "steps"].includes(way.tags.highway)) {
+    if(["footway", "steps", "path", "track"].includes(way.tags.highway) || way.tags.waterway === "stream") {
         return 2;
     }
 
