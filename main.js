@@ -46,11 +46,14 @@ instance.getHeader().then((h) => {
     let newLayers = [];
     for (let [name, layer] of Object.entries(tile.layers)) {
       let features = [];
+      let type;
       for (var i = 0; i < layer.length; i++) {
         let feature = layer.feature(i);
 
         let { properties, id } = feature;
         let { geometry } = feature.toGeoJSON(x, y, z);
+
+        type = geometry.type;
 
         if(geometry.type === "Polygon") {
           features.push({
@@ -68,13 +71,11 @@ instance.getHeader().then((h) => {
           });
         }
       }
-      newLayers.push({ features: features, name: name });
+      newLayers.push({ features: features, name: name, type });
     }
     newLayers.sort(smartCompare);
-
-    console.log(newLayers.find(layer => ["landuse"].includes(layer.name)).features.map(layer => layer.properties));
     
-    newLayers.filter(layer => !["roads", "earth", "natural", "mask"].includes(layer.name)).forEach(layer => {
+    newLayers.filter(layer => layer.type === "Polygon" && !["roads", "earth", "natural", "mask"].includes(layer.name)).forEach(layer => {
       layer.features.forEach(feature => {
         areaCoords.push({
           ...feature,
@@ -83,8 +84,10 @@ instance.getHeader().then((h) => {
       })
     })
 
-    newLayers.find(layer => layer.name === "roads").features.sort((fa, fb) => wayWidth(fa) - wayWidth(fb)).forEach(feature => {
-      wayCoords.push(feature)
+    newLayers.filter(layer => layer.type === "LineString").forEach(layer => {
+      layer.features.sort((fa, fb) => wayWidth(fa) - wayWidth(fb)).forEach(feature => {
+        wayCoords.push(feature)
+      })
     })
 
     reprojectGeometries();
@@ -269,7 +272,8 @@ regl.frame(({time}) => {
       projection,
       view,
       viewport: { x: 0, y: 0, width: canvas.width, height: canvas.height },
-      segments: wayPositionsCount
+      segments: wayPositionsCount,
+      zoomLevel: zoom
   });
   stats.end();
 })

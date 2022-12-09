@@ -58,14 +58,15 @@ export function WayRenderer(regl, resolution) {
 
             uniform mat4 projection;
             uniform mat4 view;
+            uniform float zoomLevel;
 
             varying vec3 vColor;
 
             void main() {
                 vec2 xBasis = normalize(pointB - pointA);
                 vec2 yBasis = vec2(-xBasis.y, xBasis.x);
-                vec2 offsetA = pointA + width * (position.x * xBasis + position.y * yBasis);
-                vec2 offsetB = pointB + width * (position.x * xBasis + position.y * yBasis);
+                vec2 offsetA = pointA + zoomLevel * 0.05 * width * (position.x * xBasis + position.y * yBasis);
+                vec2 offsetB = pointB + zoomLevel * 0.05 * width * (position.x * xBasis + position.y * yBasis);
                 vec2 point = mix(offsetA, offsetB, position.z);
 
                 vColor = color;
@@ -110,7 +111,8 @@ export function WayRenderer(regl, resolution) {
 
         uniforms: {
             projection: regl.prop("projection"),
-            view: regl.prop("view")
+            view: regl.prop("view"),
+            zoomLevel: regl.prop("zoomLevel"),
         },
 
         depth: {

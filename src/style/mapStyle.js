@@ -3,25 +3,31 @@ export const areaColor = (way) => {
         return 0.9;
     }
 
-    if(way.type === "water") {
-        return 0.8;
+    if(way.type === "water" || way.properties.waterway) {
+        return 0.85;
+    }
+
+    if(way.properties.landuse === "industrial") {
+        return 0.55;
     }
 
     if(way.type === "buildings") {
         return 0.5;
     }
 
-    if(["park", "playground"].includes(way.properties.leisure) || ["grass", "brownfield"].includes(way.properties.landuse)) {
+    if(["park", "playground", "pitch", "garden"].includes(way.properties.leisure) || ["grass", "brownfield", "recreation_ground", "cemetery"].includes(way.properties.landuse)) {
         return 0.8;
     }
 
-    if(way.properties.amenity === "parking" || ["railway"].includes(way.properties.landuse)) {
+    if(way.properties.amenity === "parking" || ["railway"].includes(way.properties.landuse) || way.properties.railway === "platform") {
         return 0.3;
     }
 
-    if(way.properties.amenity === "school" || way.properties.amenity === "kindergarten" || way.properties.university === "campus") {
+    if(way.properties.amenity === "school" || way.properties.amenity === "kindergarten" || way.properties.university === "campus" || way.properties.amenity === "university") {
         return 0.1;
     }
+
+    console.log("uncolored", way);
 
     return 1;
 }
@@ -32,7 +38,7 @@ export const wayColor = (way) => {
         return [0.98823529, 0.83921569, 0.64313725];
     }
 
-    if(["residential", "secondary", "tertiary", "tertiary_link", "living_street", "unclassified", "pedestrian"].includes(way.properties.highway)) {
+    if(["residential", "secondary", "secondary_link", "tertiary", "tertiary_link", "living_street", "unclassified", "pedestrian"].includes(way.properties.highway)) {
         return [1, 1, 1];
     }
 
@@ -56,7 +62,7 @@ export const wayWidth = (way) => {
         return 18;
     }
 
-    if(["residential", "secondary", "tertiary", "tertiary_link", "living_street", "primary_link"].includes(way.properties.highway)) {
+    if(["residential", "secondary", "tertiary", "secondary_link", "tertiary_link", "living_street", "primary_link"].includes(way.properties.highway)) {
         return 12;
     }
 
@@ -68,7 +74,7 @@ export const wayWidth = (way) => {
         return 7;
     }
 
-    if(["rail"].includes(way.properties.railway)) {
+    if(["rail", "disused"].includes(way.properties.railway)) {
         return 3;
     }
 
