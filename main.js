@@ -7,7 +7,7 @@ import { groundResolution, project } from "./src/projection/mercator";
 import { areaColor, wayColor, wayWidth } from "./src/style/mapStyle";
 import { WayRenderer } from "./src/renderer/WayRenderer";
 import { PolygonRenderer } from "./src/renderer/PolygonRenderer";
-import { leafletRasterLayer, PMTiles } from "pmtiles";
+import { PMTiles } from "pmtiles";
 import { VectorTile } from "@mapbox/vector-tile";
 import Pbf from "pbf";
 
@@ -86,6 +86,7 @@ instance.getHeader().then((h) => {
 
     newLayers.filter(layer => layer.type === "LineString").forEach(layer => {
       layer.features.sort((fa, fb) => wayWidth(fa) - wayWidth(fb)).forEach(feature => {
+        if(feature.properties.railway === "razed") return;
         wayCoords.push(feature)
       })
     })
@@ -115,6 +116,7 @@ const { canvas, regl } = initialize();
 
 var stats = new Stats();
 stats.showPanel(0);
+var trisPanel = stats.addPanel(new Stats.Panel('Triangles', '#0ff', '#002'));
 document.body.appendChild(stats.dom);
 
 const projection = mat4.ortho(
@@ -192,6 +194,7 @@ const reprojectGeometries = () => {
     data: widths
   })
   wayPositionsCount = positions.length - 1;
+  trisPanel.update(indices.length / 3 + 8 * wayPositionsCount);
 }
 
 document.addEventListener("wheel", (e) => {

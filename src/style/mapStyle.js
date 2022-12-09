@@ -7,7 +7,7 @@ export const areaColor = (way) => {
         return 0.85;
     }
 
-    if(way.properties.landuse === "industrial") {
+    if(way.properties.landuse === "industrial" || way.properties.amenity === "hospital") {
         return 0.55;
     }
 
@@ -15,7 +15,7 @@ export const areaColor = (way) => {
         return 0.5;
     }
 
-    if(["park", "playground", "pitch", "garden"].includes(way.properties.leisure) || ["grass", "brownfield", "recreation_ground", "cemetery"].includes(way.properties.landuse)) {
+    if(["park", "playground", "pitch", "garden", "dog_park"].includes(way.properties.leisure) || ["grass", "brownfield", "recreation_ground", "cemetery", "farmland", "farmyard"].includes(way.properties.landuse)) {
         return 0.8;
     }
 
@@ -23,11 +23,11 @@ export const areaColor = (way) => {
         return 0.3;
     }
 
-    if(way.properties.amenity === "school" || way.properties.amenity === "kindergarten" || way.properties.university === "campus" || way.properties.amenity === "university") {
+    if(way.properties.amenity === "school" || way.properties.amenity === "college" || way.properties.amenity === "kindergarten" || way.properties.university === "campus" || way.properties.amenity === "university") {
         return 0.1;
     }
 
-    console.log("uncolored", way);
+    console.log("uncolored way", way);
 
     return 1;
 }
@@ -50,7 +50,7 @@ export const wayColor = (way) => {
         return [0.85,0.85,0.85];
     }
 
-    if(way.properties.waterway === "stream") {
+    if(way.properties.waterway) {
         return [0.666, 0.82745098, 0.8745098];
     }
 
@@ -66,17 +66,19 @@ export const wayWidth = (way) => {
         return 12;
     }
 
-    if(["footway", "steps", "path", "track"].includes(way.properties.highway) || way.properties.waterway === "stream") {
+    if(["footway", "steps", "path", "track"].includes(way.properties.highway) || way.properties.waterway) {
         return 2;
     }
 
-    if(["service", "pedestrian"].includes(way.properties.highway)) {
+    if(["service", "pedestrian", "unclassified", "cycleway"].includes(way.properties.highway)) {
         return 7;
     }
 
-    if(["rail", "disused"].includes(way.properties.railway)) {
+    if(way.properties.railway) {
         return 3;
     }
+
+    console.log("uncolored", way);
 
     return 7;
 }
