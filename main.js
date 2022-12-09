@@ -7,7 +7,7 @@ import { groundResolution, project } from "./src/projection/mercator";
 import { areaColor, wayColor, wayWidth } from "./src/style/mapStyle";
 import { WayRenderer } from "./src/renderer/WayRenderer";
 import { PolygonRenderer } from "./src/renderer/PolygonRenderer";
-import { PMTiles } from "pmtiles";
+import { leafletRasterLayer, PMTiles } from "pmtiles";
 import { VectorTile } from "@mapbox/vector-tile";
 import Pbf from "pbf";
 
@@ -22,7 +22,7 @@ let lastY = 0;
 let currentX = 0;
 let currentY = 0;
 
-let zoom = 14;
+let zoom = 16.5;
 updateZoomDisplay();
 
 let wayCoords = [];
@@ -30,8 +30,8 @@ let areaCoords = [];
 
 let instance = new PMTiles("./Aachen.pmtiles");
 instance.getHeader().then((h) => {
-  let x = 8468;
-  let y = 5500;
+  let x = 8470;
+  let y = 5501;
   let z = 14;
 
   const controller = new AbortController();
@@ -60,33 +60,34 @@ instance.getHeader().then((h) => {
             locations: geometry.coordinates.flat()
           });
         } else if (geometry.type === "LineString") {
-
+          features.push({
+            type: name,
+            id,
+            properties,
+            locations: geometry.coordinates
+          });
         }
       }
       newLayers.push({ features: features, name: name });
     }
     newLayers.sort(smartCompare);
 
-    console.log({newLayers});
+    console.log(newLayers.find(layer => ["landuse"].includes(layer.name)).features.map(layer => layer.properties));
     
-    newLayers.forEach(layer => {
+    newLayers.filter(layer => !["roads", "earth", "natural", "mask"].includes(layer.name)).forEach(layer => {
       layer.features.forEach(feature => {
         areaCoords.push({
           ...feature,
           indices: earcut(feature.locations.flat())
         })
       })
+    })
 
-      // newLayers.find(layer => layer.name === "buildings").features.forEach(feature => {
-      //   areaCoords.push({
-      //     ...feature,
-      //     indices: earcut(feature.locations.flat())
-      //   })
-      // })
+    newLayers.find(layer => layer.name === "roads").features.sort((fa, fb) => wayWidth(fa) - wayWidth(fb)).forEach(feature => {
+      wayCoords.push(feature)
     })
 
     reprojectGeometries();
-    console.log(areaCoords);
   });
 });
 
@@ -102,8 +103,9 @@ let smartCompare = (a, b) => {
 const queryString = window.location.search;
 const urlParams = new URLSearchParams(queryString);
 
-let lat = urlParams.get("lat") ?? 50.77783;
-let lon = urlParams.get("lon") ?? 6.09382;
+let lat = urlParams.get("lat") ?? 50.771217;
+let lon = urlParams.get("lon") ?? 6.119103;
+
 updateLatLonDisplay();
 
 const { canvas, regl } = initialize();
@@ -167,15 +169,15 @@ const reprojectGeometries = () => {
   positions = [];
   colors = [];
   wayCoords.forEach(way => {
-    positions.push(...way.node_locations.map(({lat, lon}) => {
+    positions.push(...way.locations.map(([lon, lat]) => {
       const [projectedX, projectedY] = project({lat, lon}, zoom)
       return [
         projectedX - centerX,
         projectedY - centerY
       ];
     }), 0)
-    colors.push(...way.node_locations.map(_ => wayColor(way)), 0);
-    widths.push(...way.node_locations.map(_ => wayWidth(way)), 0);
+    colors.push(...way.locations.map(_ => wayColor(way)), 0);
+    widths.push(...way.locations.map(_ => wayWidth(way)), 0);
   })
   wayPositionsBuffer({
     data: positions
