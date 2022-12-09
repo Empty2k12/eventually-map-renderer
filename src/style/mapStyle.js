@@ -1,17 +1,21 @@
 export const areaColor = (way) => {
-    if(way.tags.building) {
+    if(way.type === "earth") {
+        return 0.9;
+    }
+
+    if(way.type === "buildings") {
         return 0.5;
     }
 
-    if(way.tags.leisure === "park" || way.tags.natural === "scrub" || ["grass", "forest"].includes(way.tags.landuse) || ["garden", "pitch"].includes(way.tags.leisure) || way.tags.scrub === "grass") {
+    if(way.properties.leisure === "park" || way.properties.natural === "scrub" || ["grass", "forest"].includes(way.properties.landuse) || ["garden", "pitch"].includes(way.properties.leisure) || way.properties.scrub === "grass") {
         return 0.8;
     }
 
-    if(way.tags.amenity === "parking") {
+    if(way.properties.amenity === "parking") {
         return 0.3;
     }
 
-    if(way.tags.amenity === "school" || way.tags.university === "campus") {
+    if(way.properties.amenity === "school" || way.properties.university === "campus") {
         return 0.1;
     }
 

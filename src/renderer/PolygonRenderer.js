@@ -21,7 +21,9 @@ export const PolygonRenderer = (regl) => regl({
         varying float vColor;
 
         void main() {
-            if(vColor == 0.8) {
+            if(vColor == 0.9) {
+                gl_FragColor = vec4(0.90980392, 0.89803922, 0.84705882, 1);
+            } else if(vColor == 0.8) {
                 gl_FragColor = vec4(0.83921569, 0.8745098, 0.73333333, 1);
             } else if(vColor == 0.5) {
                 gl_FragColor = vec4(0.87058824, 0.82745098, 0.74509804, 1);

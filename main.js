@@ -3,13 +3,13 @@ import { mat4 } from "gl-matrix";
 import Stats from "stats.js";
 import earcut from "earcut";
 
-import json from "./aachen2.json";
 import { groundResolution, project } from "./src/projection/mercator";
 import { areaColor, wayColor, wayWidth } from "./src/style/mapStyle";
 import { WayRenderer } from "./src/renderer/WayRenderer";
 import { PolygonRenderer } from "./src/renderer/PolygonRenderer";
+import { PMTiles } from "pmtiles";
+import { VectorTile } from "@mapbox/vector-tile";
 import Pbf from "pbf";
-import { Tile } from "./src/proto/vector_tile_proto";
 
 const updateLatLonDisplay = () => document.getElementById("coords").innerHTML = `Center ${lat.toFixed(6)}/${lon.toFixed(6)}`;
 const updateZoomDisplay = () => document.getElementById("zoom").innerHTML = `Zoom ${zoom.toFixed(4)}`;
@@ -22,50 +22,89 @@ let lastY = 0;
 let currentX = 0;
 let currentY = 0;
 
-let zoom = 17;
+let zoom = 14;
 updateZoomDisplay();
 
-fetch("./5502.pbf").then(file => file.arrayBuffer()).then(buf => {
-  var pbf = new Pbf(buf);
-  var obj = Tile.read(pbf);
-  console.log({obj});
-})
+let wayCoords = [];
+let areaCoords = [];
 
-const ways = json.elements.filter(el => el.type === "way" && el.tags !== undefined && !el.tags.landuse && !el.tags.boundary && el.tags.university !== "campus" && el.tags.highway !== "pedestrian" && el.tags.railway !== "razed");
-const nodes = json.elements.filter(el => el.type === "node");
+let instance = new PMTiles("./Aachen.pmtiles");
+instance.getHeader().then((h) => {
+  let x = 8468;
+  let y = 5500;
+  let z = 14;
 
-const enhanceLocations = (way) => ({
-  ...way,
-  node_locations: way.nodes.map(node_id => nodes.find(node => node.id === node_id))
-})
+  const controller = new AbortController();
+  const signal = controller.signal;
+  let cancel = () => {
+    controller.abort();
+  };
+
+  instance.getZxy(+z, +x, +y, signal).then(resp => {
+    let tile = new VectorTile(new Pbf(new Uint8Array(resp.data)));
+
+    let newLayers = [];
+    for (let [name, layer] of Object.entries(tile.layers)) {
+      let features = [];
+      for (var i = 0; i < layer.length; i++) {
+        let feature = layer.feature(i);
+
+        let { properties, id } = feature;
+        let { geometry } = feature.toGeoJSON(x, y, z);
+
+        if(geometry.type === "Polygon") {
+          features.push({
+            type: name,
+            id,
+            properties,
+            locations: geometry.coordinates.flat()
+          });
+        } else if (geometry.type === "LineString") {
+
+        }
+      }
+      newLayers.push({ features: features, name: name });
+    }
+    newLayers.sort(smartCompare);
+
+    console.log({newLayers});
+    
+    newLayers.forEach(layer => {
+      layer.features.forEach(feature => {
+        areaCoords.push({
+          ...feature,
+          indices: earcut(feature.locations.flat())
+        })
+      })
+
+      // newLayers.find(layer => layer.name === "buildings").features.forEach(feature => {
+      //   areaCoords.push({
+      //     ...feature,
+      //     indices: earcut(feature.locations.flat())
+      //   })
+      // })
+    })
+
+    reprojectGeometries();
+    console.log(areaCoords);
+  });
+});
+
+let smartCompare = (a, b) => {
+  if (a.name === "earth") return -4;
+  if (a.name === "water") return -3;
+  if (a.name === "natural") return -2;
+  if (a.name === "landuse") return -1;
+  if (a.name === "places") return 1;
+  return 0;
+};
 
 const queryString = window.location.search;
 const urlParams = new URLSearchParams(queryString);
 
-let lat = urlParams.get("lat") ?? 50.778845;
-let lon = urlParams.get("lon") ?? 6.078324;
+let lat = urlParams.get("lat") ?? 50.77783;
+let lon = urlParams.get("lon") ?? 6.09382;
 updateLatLonDisplay();
-
-const isClosedWay = (way) => way.nodes[0] === way.nodes[way.nodes.length - 1] || way.tags.area === "yes";
-const isOpenWay = (way) => way.nodes[0] !== way.nodes[way.nodes.length - 1] && !way.tags.barrier && !way.tags.indoor && !way.tags["roof:ridge"] && !way.tags["roof:edge"] && way.tags.amenity !== "bench" && !way.tags["removed:highway"] && way.tags.natural !== "tree_row";
-
-const wayCoords = ways
-  .filter(way => way.tags.area !== "yes")
-  .filter(isOpenWay)
-  .map(enhanceLocations);
-
-// Process Closed Ways
-const areaCoords = ways
-  .filter(isClosedWay)
-  .map(enhanceLocations)
-  .map(way => {
-    const node_locations = way.node_locations.slice(0, -1).map(({lat, lon}) => [lat, lon])
-    return {
-      ...way,
-      positions: node_locations,
-      indices: earcut(node_locations.flat())
-    }
-  });
 
 const { canvas, regl } = initialize();
 
@@ -104,7 +143,7 @@ const reprojectGeometries = () => {
  
   areaCoords.forEach(area => {
     const offset = positions.length;
-    positions.push(...area.positions.map(([lat, lon]) => {
+    positions.push(...area.locations.map(([lon, lat]) => {
       const [projectedX, projectedY] = project({lat, lon}, zoom)
       return [
         projectedX - centerX,
@@ -112,7 +151,7 @@ const reprojectGeometries = () => {
       ];
     }));
     indices.push(...area.indices.map(index => index + offset));
-    colors.push(...area.positions.map(_ => areaColor(area)));
+    colors.push(...area.locations.map(_ => areaColor(area)));
   })
   positionsBuffer({
     data: positions
